@@ -669,4 +669,126 @@ res.csi.2 <- ivw_mvmr(r_input = F.data.csi.2)
 res.ini.2 <- ivw_mvmr(r_input = F.data.ini.2)
 
 
+########MR Cause for correlated pleiotropy
+
+#Comment June 2022 - note that no models produced stable results. Including specimen code here for a single exposure in a single example for future reference and for any comments
+#
+
+rm(list=ls())
+
+
+#install.packages("devtools")
+library(devtools)
+devtools::install_github("jean997/cause@v1.2.0")
+
+library(cause)
+
+devtools::install_github("MRCIEU/MRInstruments")
+library(MRInstruments) 
+
+
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+remotes::install_github("explodecomputer/genetics.binaRies")
+
+#install.packages("data.table")
+library(data.table)
+
+#install.packages('R.utils')
+
+library(R.utils)
+
+
+
+#library(data.table)
+#library(devtools)
+library(TwoSampleMR)
+#library(MRInstruments)
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(ieugwasr)
+#library(cause)
+#library(genetics.binaRies)
+
+#
+
+# Set working directory 
+setwd("...GWAS summary stats") 
+#---------------------------------------------------------------------#
+#                            Read exposure 
+
+#---------------------------------------------------------------------#
+
+
+smi1 = fread("smk_init_sample1.txt", header = T,)
+
+
+
+#---------------------------------------------------------------------#
+#                           Read costs                                #----
+#---------------------------------------------------------------------#
+
+
+
+#Total healthcare cost 
+
+costs = fread(".../ss_sample2_gwas.txt")
+
+
+
+
+#---------------------------------------------------------------------#
+#                            Merge GWAS data                          #----
+#---------------------------------------------------------------------#
+
+X <- gwas_merge(smi1, costs, 
+                snp_name_cols = c("SNP", "SNP"), 
+                beta_hat_cols = c("BETA", "BETA"), 
+                se_cols = c("SE", "SE"), 
+                A1_cols = c("ALLELE0", "ALLELE0"), 
+                A2_cols = c("ALLELE1", "ALLELE1"))
+
+
+#garbage collection (not strictly needed) 
+gc() 
+
+#---------------------------------------------------------------------#
+#                    Calculate nuisance parameters                    #----
+#---------------------------------------------------------------------#
+set.seed(100)
+varlist <- with(X, sample(snp, size=1000000, replace=FALSE))
+params <- est_cause_params(X, varlist)
+head(params$mix_grid)
+
+#---------------------------------------------------------------------#
+#                                Clump data                          #----
+#---------------------------------------------------------------------#
+X$p_value <- 2*pnorm(abs(X$beta_hat_1/X$seb1), lower.tail=FALSE)
+X_clump <- X %>% rename(rsid = snp,
+                        pval = p_value) %>%
+  ieugwasr::ld_clump(dat = .,
+                     clump_r2 = 0.001,
+                     clump_p = 5e-08,
+                     plink_bin = genetics.binaRies::get_plink_binary(),
+                     pop="EUR"
+  )
+keep_snps <- as.character(X_clump$rsid) 
+
+#---------------------------------------------------------------------#
+#                    MR-CAUSE analysis                                #----
+#---------------------------------------------------------------------#
+res <- cause(X=X, variants = keep_snps, param_ests = params)
+plot(res$sharing)
+plot(res$causal)
+summary(res, ci_size=0.95)
+plot(res)
+plot(res, type="data")
+
+png('init1_costs2.png', res=300, height=2000, width=3500)
+plot(res)
+dev.off()
+
+
+
+
 
