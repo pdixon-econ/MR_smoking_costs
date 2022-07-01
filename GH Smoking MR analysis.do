@@ -1037,4 +1037,47 @@ drop p
 export delimited "...\GWAS summary stats\All SNPs for MVMR\mvmr_analysis_sample2.csv", replace
 
 
+//Test for chr15 interactions with smoking initiation
+
+
+use "all_ind_geno_analysis_new.dta", clear
+
+
+
+keep if sample == 2 //snps from sample 1, cost data from sample 2
+
+
+//keep snp  rs7173514 
+//Referring to MR Base effect allele -> flip allele 
+
+replace  rs7173514 =rs7173514 *(-1)
+
+*regr cost_person rs7173514 pc1-pc40 i.sex age i.assessment_centre, robust
+
+//Now regress by interaction of this rsid with initiation variable (phe_sm)
+
+gen inter1=rs7173514*phe_sm
+
+regr cost_person rs7173514 phe_sm inter1 pc1-pc40 i.sex age i.assessment_centre, robust
+
+////////////////////////////////////////////////////////////////////////////////
+//repeat all of the above for other sample 
+
+
+
+use all_ind_geno_analysis_new, clear
+
+
+keep if sample == 1 //snps from sample 2, cost data from sample 1
+
+//keep snp rs28681284 
+
+//Referring to MR Base effect allele -> flip allele
+
+replace  rs28681284=rs28681284*(-1)
+
+*regr cost_person rs28681284 pc1-pc40 i.sex age i.assessment_centre, robust
+gen inter2=rs28681284*phe_sm
+
+regr cost_person rs28681284  phe_sm inter2 pc1-pc40 i.sex age i.assessment_centre, robust
 
