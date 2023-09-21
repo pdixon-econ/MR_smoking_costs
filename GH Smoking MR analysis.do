@@ -1,6 +1,15 @@
+///STATA OBSERVATIONAL
+
+cd "…GRS"
 
 
-use ss_analysis_smoking.dta, clear
+use ss_analysis_smoking, clear
+
+
+cap replace MRB_tot="" if MRB_tot=="NA"
+
+cap destring MRB_tot, replace
+
 
 //Some descriptive analysis on the dataset 
 
@@ -13,21 +22,21 @@ tab sex smk_init
 
 //Simple observational regressions
 
-reg cost_person i.sex age_at_recruitment  i.assessment_centre smk_init
+reg cost_person i.sex age_at_recruitment  i.assessment_centre eco_tdi smk_init
 
 
-reg cost_person i.sex age_at_recruitment  i.assessment_centre csi 
+reg cost_person i.sex age_at_recruitment  i.assessment_centre eco_tdi csi 
 
-reg cost_person i.sex age_at_recruitment  i.assessment_centre csi if csi>0 
+reg cost_person i.sex age_at_recruitment  i.assessment_centre eco_tdi csi if csi>0 
 
 *note csi=0 is when smk_init=1
 
-reg cost_person i.sex age_at_recruitment  i.assessment_centre MRB_score
+reg cost_person i.sex age_at_recruitment  i.assessment_centre eco_tdi MRB_score
 
-reg cost_person i.sex age_at_recruitment  i.assessment_centre MRB_tot
+reg cost_person i.sex age_at_recruitment  i.assessment_centre eco_tdi MRB_tot
 
 
-//////////////////////////////////
+////////////////////////////////// 
 
 *percentage of variance explained by GRS in the phenotype
 
@@ -59,11 +68,202 @@ foreach num of numlist 1/2 {
 }
 
 
-//Analysis and other data preparation
+//////////////////////////////////////
+STATA CAUSAL
+
+SMOKING INITIATION
+
+*/
+
+cd "…GRS"
+
+//Import text file of PRS data for each of the three phenotypes
+
+import delimited "smk_init_PRS_sample1.csv ",  clear
+rename score1_sum grs_init_1
+save smk_init_PRS_sample1.dta, replace
+
+import delimited "smk_init_PRS_sample2.csv ",  clear
+rename score1_sum grs_init_2
+save smk_init_PRS_sample2.dta, replace
+
+append using smk_init_PRS_sample1.dta
+
+
+
+rename iid ieu_id
+sort ieu_id
+
+drop fid
+
+save smk_init_PRS_sample12, replace
+
+
+//csi
+cd "…GRS"
+
+import delimited "csi_PRS_sample1.csv ",  clear
+rename score1_sum grs_csi_1
+save csi_PRS_sample1.dta, replace
+
+import delimited "csi_PRS_sample2.csv ",  clear
+rename score1_sum grs_csi_2
+save csi_PRS_sample2.dta, replace
+
+append using csi_PRS_sample1.dta
+
+
+
+rename iid ieu_id
+sort ieu_id
+
+drop fid
+
+save csi_PRS_sample12, replace
+
+//mrb
+
+import delimited "mrb_score_PRS_sample1.csv ",  clear
+rename score1_sum grs_mrb_1
+save mrb_PRS_sample1.dta, replace
+
+import delimited "mrb_score_PRS_sample2.csv ",  clear
+rename score1_sum grs_mrb_2
+save mrb_PRS_sample2.dta, replace
+
+append using mrb_PRS_sample1.dta
+
+
+
+rename iid ieu_id
+sort ieu_id
+drop fid
+
+save mrb_PRS_sample12, replace
+
+
+//mrb_tot
+
+import delimited "mrb_tot_PRS_sample1.csv ",  clear
+rename score1_sum grs_mrb_tot_1
+save mrb_tot_PRS_sample1.dta, replace
+
+import delimited "mrb_tot_PRS_sample2.csv ",  clear
+rename score1_sum grs_mrb_tot_2
+save mrb_tot_PRS_sample2.dta, replace
+
+append using mrb_tot_PRS_sample1.dta
+
+
+
+rename iid ieu_id
+sort ieu_id
+drop fid
+
+save mrb_tot_PRS_sample12, replace
+
+
+//
+
+merge 1:1 ieu_id using mrb_PRS_sample12
+
+drop _merge
+
+merge 1:1 ieu_id using csi_PRS_sample12
+
+drop _merge
+
+merge 1:1 ieu_id using smk_init_PRS_sample12
+
+drop _merge
+
+save grs_smoking_ss.dta, replace
+
+//Merge with cost data
+
+cd "…Many traits analysis"
+
+
+use  neid_pca_excl_pheno_grs, clear
+
+cd "…GRS"
+
+
+drop _merge
+
+
+//Merge with the cost-pheno data (ipd)
+
+merge 1:1 ieu_id using "…grs_smoking_ss.dta"
+
+
+keep if _merge==3
+
+rename _merge split_sample_merge_smoking
+
+*Drop the old grs scores for avoidance of doubt and to make the code tractable 
+
+
+drop grs_alcohol_intake-grs_type_2_diabetes
+
+
+
+
+save ss_analysis_pd_merged_smoking, replace
+
+
+use ss_analysis_pd_merged_smoking, clear
+
+drop pca*
+
+merge 1:1 ieu_id using "…split_pheno_covars", nogen force
+
+drop sample
+
+
+//Keep the analysis set
+
+keep if cost_person_year!=.
+
+//Put new id at start of the data window
+
+sort ieu_id
+
+//Add in the sample designation
+
+merge 1:1 ieu_id using "…_sample_list.dta"
+
+//Need to rename the sample coding here
+
+
+tab _merge
+
+keep if _merge==3
+
+drop _merge
+
+sort ieu_id
+
+save ss_analysis_smoking, replace
+
+
+//////////////////////////2SLS GRS regressions here
+
+use  "….dta", clear
+rename linkedid ieu_id
+cap drop smk_init
+cap gen smk_init=0 if csi!=.
+replace smk_init=1 if csi>1 & csi<.
+sort ieu_id
+
+cd "…GRS"
+
+merge ieu_id using ss_analysis_smoking
+
+
+save ss_analysis_smoking, replace
 
 use ss_analysis_smoking,clear
-
-//Some collinearity apparent with assessment centre, hence use partial option
 
 
 
@@ -322,7 +522,9 @@ save meta_split_grs_mrb_tot, replace
 
 ////INDIVIDUAL SNP ANALYSIS 
 
-cd "...Smoking\Individual genotypes"
+
+cd "…Individual genotypes"
+
 
 import delimited ind_genotypes_all_snps_new.csv, clear
 
@@ -340,7 +542,7 @@ use all_ind_genotypes_new, clear
 
 //check the new file if it is ss_analysis new or something else  
 
-merge 1:1 ieu_id using "...Many traits analysis\ss_analysis_new.dta", force
+merge 1:1 ieu_id using "…_analysis_new.dta", force
 
 keep if cost_person!=.
 
@@ -359,16 +561,16 @@ save all_ind_geno_analysis_new.dta, replace
 
 //////////
 
-*Now, lookup genome wide significant SNPs so that they can be included in the local macros below. 
 
-import delim "...GWAS summary stats\Smk_init_summ_stats_MRBase_sample1.csv", clear
-rename ïsnp snp
+import delim "…Smk_init_summ_stats_MRBase_sample1.csv", clear
+cap rename ïsnp snp
 drop in 11/17
 list snp
 
 ////////
 
 use all_ind_geno_analysis_new, clear
+
 
 
 keep if sample == 2 //snps from sample 1, cost data from sample 2
@@ -404,9 +606,7 @@ rename parm snp
 
 keep if strpos(snp,"rs")
 
-//Flip alleles
-
-replace beta__outcome=beta__outcome*(-1)
+//save files 
 
 save cost_ini_ss1_betas_new.dta, replace
 
@@ -416,8 +616,8 @@ save cost_ini_ss1_betas_new.dta, replace
 
 *Now, lookup genome wide significant SNPs so that they can be included in the local macros below. 
 
-import delim "...GWAS summary stats\Smk_init_summ_stats_MRBase_sample2.csv", clear
-rename ïsnp snp
+import delim "…_init_summ_stats_MRBase_sample2.csv", clear
+cap rename ïsnp snp
 drop in 12/17
 list snp
 
@@ -461,11 +661,9 @@ rename parm snp
 
 keep if strpos(snp,"rs")
 
-//Flip alleles
-
-replace beta__outcome=beta__outcome*(-1)
-
 save cost_ini_ss2_betas_new.dta, replace
+
+
 
 ///////////////////////////
 
@@ -473,9 +671,8 @@ save cost_ini_ss2_betas_new.dta, replace
 
 //////////////////////////
 
-*Now, lookup genome wide significant SNPs so that they can be included in the local macros below. 
-import delim "...Smoking\GWAS summary stats\CSI_summ_stats_MRBase_sample1.csv", clear
-rename ïsnp snp
+import delim "…_summ_stats_MRBase_sample1.csv", clear
+cap rename ïsnp snp
 list snp
 
 ////////
@@ -516,20 +713,15 @@ rename parm snp
 
 keep if strpos(snp,"rs")
 
-//Flip alleles
-
-replace beta__outcome=beta__outcome*(-1)
-
 save cost_csi_ss1_betas_new.dta, replace
+
 
 
 ///Now sample 2
 
 
-*Now, lookup genome wide significant SNPs so that they can be included in the local macros below. 
-
-import delim "...Smoking\GWAS summary stats\CSI_summ_stats_MRBase_sample2.csv", clear
-rename ïsnp snp
+import delim "…CSI_summ_stats_MRBase_sample2.csv", clear
+cap rename ïsnp snp
 drop in 16/17
 list snp
 
@@ -574,25 +766,21 @@ rename parm snp
 
 keep if strpos(snp,"rs")
 
-//Flip alleles
-
-replace beta__outcome=beta__outcome*(-1)
-
-
 save cost_csi_ss2_betas_new.dta, replace
+
+
 
 
 
 /////////////////////////////////////////
 
-//MRB - comment - this is only for the MRB_tot as the MRB_score doesn't have sufficient SNPs to do sensible analysis here
+//MRB - comment - this is only for the MRB_tot as the MRB_score doesn't have sufficient SNPs 
 
 ////////////////////////////////////////
 
-*Now, lookup genome wide significant SNPs so that they can be included in the local macros below. 
 
-import delim "...Smoking\GWAS summary stats\MRB_tot_summ_stats_MRBase_sample1.csv", clear
-rename ïsnp snp
+import delim "…MRB_tot_summ_stats_MRBase_sample1.csv", clear
+cap rename ïsnp snp
 list snp
 
 ////////
@@ -634,12 +822,8 @@ rename parm snp
 
 keep if strpos(snp,"rs")
 
-//Flip alleles
-
-replace beta__outcome=beta__outcome*(-1)
-
-
 save cost_mrb_tot_ss1_betas_new.dta, replace
+
 
 
 ///Now sample 2
@@ -647,8 +831,8 @@ save cost_mrb_tot_ss1_betas_new.dta, replace
 
 *Now, lookup genome wide significant SNPs so that they can be included in the local macros below. 
 
-import delim "...Smoking\GWAS summary stats\MRB_tot_summ_stats_MRBase_sample2.csv", clear
-rename ïsnp snp
+import delim "…MRB_tot_summ_stats_MRBase_sample2.csv", clear
+cap rename ïsnp snp
 drop in 3
 list snp
 
@@ -693,95 +877,160 @@ rename parm snp
 
 keep if strpos(snp,"rs")
 
-//Flip alleles
-
-replace beta__outcome=beta__outcome*(-1)
-
 save cost_mrb_tot_ss2_betas_new.dta, replace
 
 
-//////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 //////GET DATA READY FOR MRBASE  
 
 
+
 //INITIATION 1
-import delim "...Smoking\GWAS hits\smk_init_snps_clumped_r2_0.001.csv", clear
+import delim "…_init_snps_clumped_r2_0.001.csv", clear
 
 
 gen outcome="Cost per person-year"
 replace exposure="Smoking initiation"
 
-merge 1:1 snp using "...Smoking\Individual genotypes\cost_ini_ss1_betas_new.dta" , nogen
+merge 1:1 snp using "…cost_ini_ss1_betas_new.dta" , nogen
 
 
 drop v1 
 
 rename  p p_outcome 
 
-save "...Smoking\Individual genotypes\ss1_smoking_initiation_mrbase", replace
+save "…ss1_smoking_initiation_mrbase", replace
 
-export delimited "...Smoking\Individual genotypes\ss1_smoking_initiation_mrbase.csv", replace
+//Allele flipping
+
+// Swap values of effect_alleleexposure and other_alleleexposure
+gen temp_effect = effect_alleleexposure
+gen temp_other = other_alleleexposure
+replace effect_alleleexposure = temp_other if betaexposure < 0
+replace other_alleleexposure = temp_effect if betaexposure < 0
+drop temp_effect temp_other
+
+// Subtract eafexposure from 1 whenever betaexposure is negative
+replace eafexposure = 1 - eafexposure if betaexposure < 0
+
+// Change the value of betaexposure to be positive whenever it is negative
+replace betaexposure = -betaexposure if betaexposure < 0
+
+
+
+//
+
+export delimited "…ss1_smoking_initiation_mrbase.csv", replace
 
 
 //INITIATION 2 
 
-import delim "...Smoking\GWAS hits\smk_init_snps_clumped_r2_0.001_sample2.csv", clear
+import delim "…_init_snps_clumped_r2_0.001_sample2.csv", clear
 
 gen outcome="Cost per person-year"
 replace exposure="Smoking initiation"
 
-merge 1:1 snp using "...Smoking\Individual genotypes\cost_ini_ss2_betas_new.dta" , nogen
+merge 1:1 snp using "…cost_ini_ss2_betas_new.dta" , nogen
 
 
 drop v1
 
 rename  p p_outcome 
 
-save "...Smoking\Individual genotypes\ss2_smoking_initiation_mrbase", replace
+save "…ss2_smoking_initiation_mrbase", replace
 
-export delimited "...Smoking\Individual genotypes\ss2_smoking_initiation_mrbase.csv", replace
+//Allele flipping
+
+// Swap values of effect_alleleexposure and other_alleleexposure
+gen temp_effect = effect_alleleexposure
+gen temp_other = other_alleleexposure
+replace effect_alleleexposure = temp_other if betaexposure < 0
+replace other_alleleexposure = temp_effect if betaexposure < 0
+drop temp_effect temp_other
+
+// Subtract eafexposure from 1 whenever betaexposure is negative
+replace eafexposure = 1 - eafexposure if betaexposure < 0
+
+// Change the value of betaexposure to be positive whenever it is negative
+replace betaexposure = -betaexposure if betaexposure < 0
+
+
+export delimited "…ss2_smoking_initiation_mrbase.csv", replace
 
 //////////////////////////////////////////////////
 
 //LIFETIME SMOKING 1
 
-import delim "...Smoking\GWAS hits\CSI_snps_clumped_r2_0.001.csv", clear
+import delim "…CSI_snps_clumped_r2_0.001.csv", clear
 
 
 gen outcome="Cost per person-year"
 replace exposure="Lifetime smoking"
 
-merge 1:1 snp using "...Smoking\Individual genotypes\cost_csi_ss1_betas_new.dta" , nogen
+merge 1:1 snp using "…cost_csi_ss1_betas_new.dta" , nogen
 
 
 drop v1 
 
 rename  p p_outcome 
 
-save "...Smoking\Individual genotypes\ss1_csi_mrbase", replace
+save "…ss1_csi_mrbase", replace
 
-export delimited "...Smoking\Individual genotypes\ss1_csi_mrbase.csv", replace
+//Allele flipping
+
+// Swap values of effect_alleleexposure and other_alleleexposure
+gen temp_effect = effect_alleleexposure
+gen temp_other = other_alleleexposure
+replace effect_alleleexposure = temp_other if betaexposure < 0
+replace other_alleleexposure = temp_effect if betaexposure < 0
+drop temp_effect temp_other
+
+// Subtract eafexposure from 1 whenever betaexposure is negative
+replace eafexposure = 1 - eafexposure if betaexposure < 0
+
+// Change the value of betaexposure to be positive whenever it is negative
+replace betaexposure = -betaexposure if betaexposure < 0
+
+
+export delimited "Y…\ss1_csi_mrbase.csv", replace
 
 
 //LIFETIME SMOKING 2 
 
-import delim "...Smoking\GWAS hits\CSI_snps_clumped_r2_0.001_sample2.csv", clear
+import delim .Y:\projects\ieu2\p1\013\working\data\Smoking\GWAS hits\CSI_snps_clumped_r2_0.001_sample2.csv", clear
 
 gen outcome="Cost per person-year"
 replace exposure="Lifetime smoking"
 
 
-merge 1:1 snp using "...Smoking\Individual genotypes\cost_csi_ss2_betas_new.dta" , nogen
+merge 1:1 snp using "…cost_csi_ss2_betas_new.dta" , nogen
 
 
 drop v1
 
 rename  p p_outcome 
 
-save "...Smoking\Individual genotypes\ss2_csi_mrbase", replace
+save "…ss2_csi_mrbase", replace
 
-export delimited "...Smoking\Individual genotypes\ss2_csi_mrbase.csv", replace
+//Allele flipping
+
+// Swap values of effect_alleleexposure and other_alleleexposure
+gen temp_effect = effect_alleleexposure
+gen temp_other = other_alleleexposure
+replace effect_alleleexposure = temp_other if betaexposure < 0
+replace other_alleleexposure = temp_effect if betaexposure < 0
+drop temp_effect temp_other
+
+// Subtract eafexposure from 1 whenever betaexposure is negative
+replace eafexposure = 1 - eafexposure if betaexposure < 0
+
+// Change the value of betaexposure to be positive whenever it is negative
+replace betaexposure = -betaexposure if betaexposure < 0
+
+
+export delimited "…_csi_mrbase.csv", replace
 
 //////////////////////////////////////////////////
 
@@ -789,51 +1038,82 @@ export delimited "...Smoking\Individual genotypes\ss2_csi_mrbase.csv", replace
 
 //RISK 1
 
-import delim "...Smoking\GWAS hits\mrb_snps_tot_clumped_r2_0.001.csv", clear
+import delim "…mrb_snps_tot_clumped_r2_0.001.csv", clear
 
 
 gen outcome="Cost per person-year"
 replace exposure="Risk"
 
-merge 1:1 snp using "...Smoking\Individual genotypes\cost_mrb_tot_ss1_betas_new.dta" , nogen
+merge 1:1 snp using "…\cost_mrb_tot_ss1_betas_new.dta" , nogen
 
 
 drop v1 
 
 rename  p p_outcome 
 
-save "...Smoking\Individual genotypes\ss1_mrb_mrbase", replace
+save "…ss1_mrb_mrbase", replace
 
-export delimited "...Smoking\Individual genotypes\ss1_mrb_mrbase.csv", replace
+//Allele flipping
+
+// Swap values of effect_alleleexposure and other_alleleexposure
+gen temp_effect = effect_alleleexposure
+gen temp_other = other_alleleexposure
+replace effect_alleleexposure = temp_other if betaexposure < 0
+replace other_alleleexposure = temp_effect if betaexposure < 0
+drop temp_effect temp_other
+
+// Subtract eafexposure from 1 whenever betaexposure is negative
+replace eafexposure = 1 - eafexposure if betaexposure < 0
+
+// Change the value of betaexposure to be positive whenever it is negative
+replace betaexposure = -betaexposure if betaexposure < 0
+
+
+export delimited "…ss1_mrb_mrbase.csv", replace
 
 
 //RISK 2 
 
-import delim "...Smoking\GWAS hits\mrb_snps_tot_clumped_r2_0.001_sample2.csv", clear
+import delim "…_snps_tot_clumped_r2_0.001_sample2.csv", clear
 
 gen outcome="Cost per person-year"
 
 replace exposure="Risk"
 
-merge 1:1 snp using "...Smoking\Individual genotypes\cost_mrb_tot_ss2_betas_new.dta" , nogen
+merge 1:1 snp using "…cost_mrb_tot_ss2_betas_new.dta" , nogen
 
 
 drop v1
 
 rename  p p_outcome 
 
-save "...Smoking\Individual genotypes\ss2_mrb_mrbase", replace
+save "…ss2_mrb_mrbase", replace
 
-export delimited "...Smoking\Individual genotypes\ss2_mrb_mrbase.csv", replace
+//Allele flipping
+
+// Swap values of effect_alleleexposure and other_alleleexposure
+gen temp_effect = effect_alleleexposure
+gen temp_other = other_alleleexposure
+replace effect_alleleexposure = temp_other if betaexposure < 0
+replace other_alleleexposure = temp_effect if betaexposure < 0
+drop temp_effect temp_other
+
+// Subtract eafexposure from 1 whenever betaexposure is negative
+replace eafexposure = 1 - eafexposure if betaexposure < 0
+
+// Change the value of betaexposure to be positive whenever it is negative
+replace betaexposure = -betaexposure if betaexposure < 0
+
+
+export delimited "…ss2_mrb_mrbase.csv", replace
 
 ///////////////////////////////////////////////////////////////////////////////////////
 
 ///MVMR 
 
 
-cd "...\GWAS summary stats\All SNPs for MVMR"
+cd “…All SNPs for MVMR"
 
-//
 
 
 
@@ -842,7 +1122,7 @@ cd "...\GWAS summary stats\All SNPs for MVMR"
 import delimited "Smk_init_all_snps_MRBase_sample1.csv", clear
 rename beta init_beta
 rename se init_se
-rename ïsnp  snp
+cap rename ïsnp  snp
 drop chr effect_allele other_allele eaf pval
 drop in 28/29
 
@@ -853,7 +1133,7 @@ save smk_init_all_snps_MRBase_sample1,replace
 import delimited "CSI_all_snps_MRBase_sample1.csv", clear
 rename beta csi_beta
 rename se csi_se
-rename ïsnp  snp
+cap rename ïsnp  snp
 drop chr effect_allele other_allele eaf pval
 drop in 28/29
 
@@ -864,7 +1144,7 @@ save CSI_all_snps_MRBase_sample1,replace
 import delimited "MRB_tot_all_snps_MRBase_sample1.csv", clear
 rename beta MRB_tot_beta
 rename se MRB_tot_se
-rename ïsnp  snp
+cap rename ïsnp  snp
 drop chr effect_allele other_allele eaf pval
 drop in 28/29
 
@@ -887,7 +1167,7 @@ save MRB_tot_all_snps_MRBase_sample1,replace
 import delimited "Smk_init_all_snps_MRBase_sample2.csv", clear
 rename beta init_beta
 rename se init_se
-rename ïsnp  snp
+cap rename ïsnp  snp
 drop chr effect_allele other_allele eaf pval
 
 save smk_init_all_snps_MRBase_sample2,replace
@@ -897,7 +1177,7 @@ save smk_init_all_snps_MRBase_sample2,replace
 import delimited "CSI_all_snps_MRBase_sample2.csv", clear
 rename beta csi_beta
 rename se csi_se
-rename ïsnp  snp
+cap rename ïsnp  snp
 drop chr effect_allele other_allele eaf pval
 
 save CSI_all_snps_MRBase_sample2,replace
@@ -907,7 +1187,7 @@ save CSI_all_snps_MRBase_sample2,replace
 import delimited "MRB_tot_all_snps_MRBase_sample2.csv", clear
 rename beta MRB_tot_beta
 rename se MRB_tot_se
-rename ïsnp  snp
+cap rename ïsnp  snp
 drop chr effect_allele other_allele eaf pval
 
 save MRB_tot_all_snps_MRBase_sample2,replace
@@ -926,11 +1206,11 @@ save MRB_tot_all_snps_MRBase_sample2,replace
  //SAMPLE 1 SNPS, COST FROM SAMPLE 2
  
 //Getting outcome data - SNPs from sample 1, cost data from sample 2
-cd "...Smoking\Individual genotypes"
+cd "…Individual genotypes"
 
 use all_ind_geno_analysis_new, clear
 
-cd "...\GWAS summary stats\All SNPs for MVMR"
+cd "…All SNPs for MVMR"
 
 
 keep if sample == 2 //snps from sample 1, cost data from sample 2
@@ -968,15 +1248,15 @@ keep if strpos(snp,"rs")
 
 save cost_mvmr_ss1_betas.dta, replace
 
-use "...Smoking\Individual genotypes\cost_mvmr_ss1_betas.dta", clear
+use "…cost_mvmr_ss1_betas.dta", clear
 
-merge 1:1 snp using "...\GWAS summary stats\All SNPs for MVMR\mvmr_sample1", nogen
+merge 1:1 snp using "…mvmr_sample1", nogen
 
 drop p
 
  
 
-export delimited "...\GWAS summary stats\All SNPs for MVMR\mvmr_analysis_sample1.csv", replace
+export delimited "…mvmr_analysis_sample1.csv", replace
 
 
 
@@ -986,11 +1266,11 @@ export delimited "...\GWAS summary stats\All SNPs for MVMR\mvmr_analysis_sample1
  //SAMPLE 2 SNPS, COST FROM SAMPLE 1
  
 //Getting outcome data - SNPs from sample 1, cost data from sample 2
-cd "...Smoking\Individual genotypes"
+cd "…Individual genotypes"
 
 use all_ind_geno_analysis_new, clear
 
-cd "...\GWAS summary stats\All SNPs for MVMR"
+cd "…All SNPs for MVMR"
 
 
 keep if sample == 1 //snps from sample 2, cost data from sample 1
@@ -1030,54 +1310,16 @@ save cost_mvmr_ss2_betas.dta, replace
 use cost_mvmr_ss2_betas, clear
 
 
-merge 1:1 snp using "...\GWAS summary stats\All SNPs for MVMR\mvmr_sample2", nogen
+merge 1:1 snp using "…mvmr_sample2", nogen
 
 drop p
 
-export delimited "...\GWAS summary stats\All SNPs for MVMR\mvmr_analysis_sample2.csv", replace
+
+//flip alleles
+
+foreach var in MRB_tot_beta  csi_beta  init_beta  {
+    replace `var' = -`var' if `var' < 0
+}
 
 
-//Test for chr15 interactions with smoking initiation
-
-
-use "all_ind_geno_analysis_new.dta", clear
-
-
-
-keep if sample == 2 //snps from sample 1, cost data from sample 2
-
-
-//keep snp  rs7173514 
-//Referring to MR Base effect allele -> flip allele 
-
-replace  rs7173514 =rs7173514 *(-1)
-
-*regr cost_person rs7173514 pc1-pc40 i.sex age i.assessment_centre, robust
-
-//Now regress by interaction of this rsid with initiation variable (phe_sm)
-
-gen inter1=rs7173514*phe_sm
-
-regr cost_person rs7173514 phe_sm inter1 pc1-pc40 i.sex age i.assessment_centre, robust
-
-////////////////////////////////////////////////////////////////////////////////
-//repeat all of the above for other sample 
-
-
-
-use all_ind_geno_analysis_new, clear
-
-
-keep if sample == 1 //snps from sample 2, cost data from sample 1
-
-//keep snp rs28681284 
-
-//Referring to MR Base effect allele -> flip allele
-
-replace  rs28681284=rs28681284*(-1)
-
-*regr cost_person rs28681284 pc1-pc40 i.sex age i.assessment_centre, robust
-gen inter2=rs28681284*phe_sm
-
-regr cost_person rs28681284  phe_sm inter2 pc1-pc40 i.sex age i.assessment_centre, robust
-
+export delimited "...mvmr_analysis_sample2.csv", replace
