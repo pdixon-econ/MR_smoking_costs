@@ -1,6 +1,5 @@
 
 
-
 #Smoking analysis 
 
 rm(list=ls(all=TRUE))
@@ -11,13 +10,14 @@ rm(list=ls(all=TRUE))
 
 ###################################
 
+#New version - check everything is ok with this one
 
 library(TwoSampleMR)
 library(dplyr)
 library(ggplot2)
 
 
-setwd(".../Individual genotypes/")
+setwd("//…Individual genotypes/")
 
 ##First, read in my file name with the non-standard headings
 
@@ -80,7 +80,6 @@ initiation.res.summary <- mr(dat, method_list=c("mr_ivw", "mr_egger_regression",
 initiation.resegger <- mr(dat, method_list=c("mr_ivw", "mr_egger_regression"))
 initiation.resmedian <- mr(dat, method_list=c("mr_ivw","mr_simple_median", "mr_weighted_median", "mr_penalised_weighted_median"))	
 initiation.resmode <- mr(dat, method_list=c("mr_ivw", "mr_simple_mode", "mr_weighted_mode"))			
-initiation.resraps <- mr(dat, method_list = c("mr_ivw","mr_raps"), parameters = list(over.dispersion = FALSE, loss.function = "l2"))
 initiation.resivw <- mr(dat, method_list = "mr_ivw")
 
 
@@ -116,8 +115,6 @@ initiation.res_loo
 
 initiation.res.summary 
 
-##Comment - need to save as csv for meta analysis in Stata - see code below for other
-##sample
 
 #######GRAPHICS 
 
@@ -460,8 +457,6 @@ mrb.ss1.mr_egger_int
 
 
 ##Steiger test for directionality - 
-##Comment - we need to get proper N for exposure and outcome, but otherwise good to go
-##For now....
 
 samplesize.exposure<-rep(150000,10)
 sampelsize.outcome<-rep(150000,10)
@@ -539,8 +534,6 @@ mrb.ss2.mr_egger_int
 
 
 ##Steiger test for directionality - 
-##Comment - we need to get proper N for exposure and outcome, but otherwise good to go
-##For now....
 
 samplesize.exposure<-rep(150000,10)
 sampelsize.outcome<-rep(150000,10)
@@ -556,25 +549,23 @@ steiger1 <- directionality_test(dat)
 ###################################################################################################
 
 
-install.packages("remotes")
+#install.packages("remotes")
 
 library(remotes)
 install_github("WSpiller/MVMR", build_opts = c("--no-resave-data", "--no-manual"), build_vignettes = TRUE)
+
+library(MVMR)
+
+##getting data
 
 
 
 ##Sample 1
 
 
-dat_mvmr <- read.csv(file = ".../GWAS summary stats/All SNPs for MVMR/mvmr_analysis_sample1.csv")
+dat_mvmr <- read.csv(file = "…mvmr_analysis_sample1.csv")
 
 head(dat_mvmr)
-
-##flip alleles
-
-dat_mvmr$MRB_tot_beta<-dat_mvmr$MRB_tot_beta*(-1)
-dat_mvmr$csi_beta<-dat_mvmr$csi_beta*(-1)
-dat_mvmr$init_beta<-dat_mvmr$init_beta*(-1)
 
 
 
@@ -598,7 +589,9 @@ F.data.ini <- format_mvmr(BXGs = dat_mvmr[,c(4,8)],
 
 head(F.data.ini)
 
+##upload the gencov file (experimental, 26 march 2021)
 
+#gencov<-snpcov_mvmr()
 
 ###Testing for weak instruments
 
@@ -611,6 +604,7 @@ sres.ini <- strength_mvmr(r_input = F.data.ini, gencov = 0)
 pres.csi <- pleiotropy_mvmr(r_input = F.data.csi, gencov = 0)
 pres.ini <- pleiotropy_mvmr(r_input = F.data.ini, gencov = 0)
 
+##Comment - need to add the actual covariance matrices in here to check...
 
 ##Estimate causal effects
 
@@ -621,15 +615,10 @@ res.ini <- ivw_mvmr(r_input = F.data.ini)
 ##Sample 2
 
 
-dat_mvmr <- read.csv(file = ".../GWAS summary stats/All SNPs for MVMR/mvmr_analysis_sample2.csv")
+dat_mvmr <- read.csv(file = "…mvmr_analysis_sample2.csv")
 
 head(dat_mvmr)
 
-##flip alleles
-
-dat_mvmr$MRB_tot_beta<-dat_mvmr$MRB_tot_beta*(-1)
-dat_mvmr$csi_beta<-dat_mvmr$csi_beta*(-1)
-dat_mvmr$init_beta<-dat_mvmr$init_beta*(-1)
 
 ##format these data
 
@@ -662,133 +651,10 @@ sres.ini.2 <- strength_mvmr(r_input = F.data.ini.2, gencov = 0)
 pres.csi.2 <- pleiotropy_mvmr(r_input = F.data.csi.2, gencov = 0)
 pres.in.2i <- pleiotropy_mvmr(r_input = F.data.ini.2, gencov = 0)
 
+##Comment - need to add the actual covariance matrices in here to check...
 
 ##Estimate causal effects
 
 res.csi.2 <- ivw_mvmr(r_input = F.data.csi.2)
 res.ini.2 <- ivw_mvmr(r_input = F.data.ini.2)
-
-
-########MR Cause for correlated pleiotropy
-
-#Comment June 2022 - note that no models produced stable results. Including specimen code here for a single exposure in a single example for future reference and for any comments
-#
-
-rm(list=ls())
-
-
-#install.packages("devtools")
-library(devtools)
-devtools::install_github("jean997/cause@v1.2.0")
-
-library(cause)
-
-devtools::install_github("MRCIEU/MRInstruments")
-library(MRInstruments) 
-
-
-if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
-remotes::install_github("explodecomputer/genetics.binaRies")
-
-#install.packages("data.table")
-library(data.table)
-
-#install.packages('R.utils')
-
-library(R.utils)
-
-
-
-#library(data.table)
-#library(devtools)
-library(TwoSampleMR)
-#library(MRInstruments)
-library(tidyverse)
-library(dplyr)
-library(readr)
-library(ieugwasr)
-#library(cause)
-#library(genetics.binaRies)
-
-#
-
-# Set working directory 
-setwd("...GWAS summary stats") 
-#---------------------------------------------------------------------#
-#                            Read exposure 
-
-#---------------------------------------------------------------------#
-
-
-smi1 = fread("smk_init_sample1.txt", header = T,)
-
-
-
-#---------------------------------------------------------------------#
-#                           Read costs                                #----
-#---------------------------------------------------------------------#
-
-
-
-#Total healthcare cost 
-
-costs = fread(".../ss_sample2_gwas.txt")
-
-
-
-
-#---------------------------------------------------------------------#
-#                            Merge GWAS data                          #----
-#---------------------------------------------------------------------#
-
-X <- gwas_merge(smi1, costs, 
-                snp_name_cols = c("SNP", "SNP"), 
-                beta_hat_cols = c("BETA", "BETA"), 
-                se_cols = c("SE", "SE"), 
-                A1_cols = c("ALLELE0", "ALLELE0"), 
-                A2_cols = c("ALLELE1", "ALLELE1"))
-
-
-#garbage collection (not strictly needed) 
-gc() 
-
-#---------------------------------------------------------------------#
-#                    Calculate nuisance parameters                    #----
-#---------------------------------------------------------------------#
-set.seed(100)
-varlist <- with(X, sample(snp, size=1000000, replace=FALSE))
-params <- est_cause_params(X, varlist)
-head(params$mix_grid)
-
-#---------------------------------------------------------------------#
-#                                Clump data                          #----
-#---------------------------------------------------------------------#
-X$p_value <- 2*pnorm(abs(X$beta_hat_1/X$seb1), lower.tail=FALSE)
-X_clump <- X %>% rename(rsid = snp,
-                        pval = p_value) %>%
-  ieugwasr::ld_clump(dat = .,
-                     clump_r2 = 0.001,
-                     clump_p = 5e-08,
-                     plink_bin = genetics.binaRies::get_plink_binary(),
-                     pop="EUR"
-  )
-keep_snps <- as.character(X_clump$rsid) 
-
-#---------------------------------------------------------------------#
-#                    MR-CAUSE analysis                                #----
-#---------------------------------------------------------------------#
-res <- cause(X=X, variants = keep_snps, param_ests = params)
-plot(res$sharing)
-plot(res$causal)
-summary(res, ci_size=0.95)
-plot(res)
-plot(res, type="data")
-
-png('init1_costs2.png', res=300, height=2000, width=3500)
-plot(res)
-dev.off()
-
-
-
-
 
